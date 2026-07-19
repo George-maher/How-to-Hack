@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { projectsApi, scansApi } from '../services/api';
 import type { Project, Scan } from '../types';
@@ -14,7 +14,7 @@ export default function ProjectDetail() {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scanningRef = useRef(false);
 
-  const loadProject = async () => {
+  const loadProject = useCallback(async () => {
     try {
       const projectId = Number(id);
       const [projectData, scansData] = await Promise.all([
@@ -35,12 +35,12 @@ export default function ProjectDetail() {
           pollingRef.current = null;
         }
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     loadProject();
@@ -50,7 +50,7 @@ export default function ProjectDetail() {
         pollingRef.current = null;
       }
     };
-  }, [id]);
+  }, [loadProject]);
 
   useEffect(() => {
     if (scanning && !pollingRef.current) {
@@ -63,7 +63,7 @@ export default function ProjectDetail() {
         pollingRef.current = null;
       }
     };
-  }, [scanning, id]);
+  }, [scanning, loadProject]);
 
   const startScan = async () => {
     setScanning(true);
@@ -71,8 +71,8 @@ export default function ProjectDetail() {
     try {
       await projectsApi.scan(Number(id));
       await loadProject();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
       setScanning(false);
       scanningRef.current = false;
     }

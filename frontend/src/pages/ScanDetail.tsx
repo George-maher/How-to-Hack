@@ -33,8 +33,8 @@ export default function ScanDetail() {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
@@ -262,8 +262,8 @@ function ReportActions({ scanId, onGenerated }: { scanId: number; onGenerated: (
     try {
       await reportsApi.generate(scanId, format);
       onGenerated();
-    } catch (err: any) {
-      alert('Failed to generate report: ' + err.message);
+    } catch (err: unknown) {
+      alert('Failed to generate report: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setGenerating(false);
     }

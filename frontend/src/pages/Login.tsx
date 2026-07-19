@@ -19,8 +19,8 @@ export default function Login() {
       setToken(res.token);
       setStoredUser(res.user);
       navigate('/');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setSubmitting(false);
     }

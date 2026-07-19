@@ -22,8 +22,8 @@ export default function CreateProject() {
         description: description || undefined,
       });
       navigate(`/projects/${project.id}`);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
       setSubmitting(false);
     }
   };

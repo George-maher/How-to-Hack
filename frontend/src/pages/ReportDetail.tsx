@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { reportsApi } from '../services/api';
 import type { Report } from '../types';
@@ -19,28 +19,28 @@ export default function ReportDetail() {
   const [error, setError] = useState<string | null>(null);
   const [downloadFormat, setDownloadFormat] = useState('html');
 
-  const loadReport = async () => {
+  const loadReport = useCallback(async () => {
     try {
       const data = await reportsApi.get(Number(id));
       setReport(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     loadReport();
-  }, [id]);
+  }, [loadReport]);
 
   const handleRegenerate = async () => {
     try {
       setLoading(true);
       const result = await reportsApi.regenerate(Number(id), downloadFormat);
       setReport(result.report);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -51,8 +51,8 @@ export default function ReportDetail() {
     try {
       await reportsApi.delete(Number(id));
       navigate(-1);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     }
   };
 
