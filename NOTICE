@@ -1,0 +1,53 @@
+NOTICE
+======
+
+HowToHack Security Scanning Platform
+Copyright (c) 2024 HowToHack. All Rights Reserved.
+
+This software is proprietary and confidential. It is protected by copyright
+law and international treaties. Unauthorized reproduction, modification,
+distribution, or use of this software, or any portion thereof, is strictly
+prohibited without the express written permission of HowToHack.
+
+Third-Party Components
+----------------------
+
+This software incorporates the following third-party components, each
+subject to its own license terms:
+
+1. Laravel Framework (https://laravel.com)
+   License: MIT License
+   Copyright (c) Taylor Otwell
+   This product includes software developed by Taylor Otwell.
+
+2. React (https://react.dev)
+   License: MIT License
+   Copyright (c) Meta Platforms, Inc.
+
+3. TypeScript (https://www.typescriptlang.org)
+   License: Apache License 2.0
+   Copyright (c) Microsoft Corporation.
+
+4. Vite (https://vite.dev)
+   License: MIT License
+   Copyright (c) 2019-present, VoidZero Inc. and Vite contributors.
+
+5. Various open-source PHP packages as listed in composer.json
+   Each package is used under its respective license terms.
+
+6. Various open-source npm packages as listed in package.json
+   Each package is used under its respective license terms.
+
+7. Security scanning tools (nmap, nuclei, nikto, etc.)
+   Each tool is used under its respective license terms.
+
+All third-party components are used in accordance with their respective
+license terms, and no modification has been made to them.
+
+For a complete list of third-party licenses, please refer to the
+NOTICE-THIRD-PARTY.md file or the individual package documentation.
+
+HowToHack is not affiliated with or endorsed by the authors of the
+above third-party components.
+
+Contact: legal@howtohack.dev

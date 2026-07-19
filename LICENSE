@@ -1,0 +1,150 @@
+PROPRIETARY SOFTWARE LICENSE
+============================
+
+Copyright (c) 2024 HowToHack. All Rights Reserved.
+
+1. DEFINITIONS
+
+"Software" shall mean the HowToHack security scanning platform, including all
+source code, object code, documentation, configuration files, scripts,
+Dockerfiles, and any associated materials provided hereunder.
+
+"Licensee" shall mean the individual or entity that has obtained a valid
+license to use the Software.
+
+"Licensor" shall mean HowToHack and its authorized licensors.
+
+"Commercial Use" shall mean use of the Software for direct or indirect
+commercial advantage or monetary compensation, including but not limited to
+use in a business enterprise, use as a managed service, use for consulting
+or professional services, or use in any revenue-generating activity.
+
+2. GRANT OF LICENSE
+
+Subject to the terms and conditions of this Agreement, Licensor grants
+Licensee a non-exclusive, non-transferable, non-sublicensable, revocable,
+limited license to install and use the Software solely for Licensee's
+internal business purposes, provided that:
+
+(a) Licensee has paid all applicable license fees; and
+(b) Licensee has obtained a valid license key from Licensor; and
+(c) Licensee complies with all terms and restrictions set forth herein.
+
+This license is strictly limited to the number of installations, users,
+or instances for which Licensee has paid the applicable fees.
+
+3. RESTRICTIONS AND PROHIBITIONS
+
+Licensee shall NOT, and shall not permit any third party to:
+
+(a) Copy, reproduce, duplicate, or create derivative works of the Software
+    or any portion thereof;
+
+(b) Modify, adapt, translate, or alter the Software in any way;
+
+(c) Distribute, sublicense, lease, rent, loan, or otherwise transfer the
+    Software to any third party;
+
+(d) Use the Software for commercial purposes without obtaining a separate
+    commercial license from Licensor;
+
+(e) Reverse engineer, decompile, disassemble, or otherwise attempt to
+    derive the source code of the Software, to the extent such restriction
+    is permitted by applicable law;
+
+(f) Fork, republish, or redistribute the Software or any portion thereof;
+
+(g) Sell, resell, or charge for access to the Software or any services
+    based thereon;
+
+(h) Remove, alter, or obscure any copyright, trademark, or proprietary
+    notices contained in the Software;
+
+(i) Use the Software to develop a competing product or service;
+
+(j) Use the Software in any manner that violates applicable laws or
+    regulations;
+
+(k) Access or use any portion of the Software's source code without
+    explicit written permission from Licensor;
+
+(l) Create, host, or distribute any publicly accessible version of the
+    Software or any derivative thereof.
+
+4. INTELLECTUAL PROPERTY RIGHTS
+
+The Software is protected by copyright laws, international copyright
+treaties, and other intellectual property laws and treaties worldwide.
+All title, ownership rights, and intellectual property rights in and to
+the Software, including but not limited to all source code, object code,
+algorithms, architecture, user interface designs, documentation, and
+any copies thereof, are owned by Licensor or its licensors.
+
+The Software is licensed, not sold. This license does not transfer any
+ownership rights to Licensee.
+
+5. CONFIDENTIALITY
+
+Licensee acknowledges that the Software contains trade secrets and
+confidential information of Licensor. Licensee shall maintain the
+confidentiality of the Software and shall not disclose the Software,
+its source code, or any related materials to any third party without
+the prior written consent of Licensor.
+
+6. LICENSE KEY AND ACTIVATION
+
+If the Software requires a license key for activation:
+
+(a) Each license key is uniquely tied to a specific Licensee and
+    installation;
+
+(b) Licensee shall not share, publish, or distribute license keys;
+
+(c) Licensor reserves the right to deactivate or revoke license keys
+    found to be used in violation of this Agreement.
+
+7. WARRANTY DISCLAIMER
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTY
+OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+AND NON-INFRINGEMENT. LICENSOR DOES NOT WARRANT THAT THE SOFTWARE WILL
+MEET LICENSEE'S REQUIREMENTS OR THAT OPERATION WILL BE UNINTERRUPTED
+OR ERROR-FREE.
+
+8. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+LICENSOR BE LIABLE FOR ANY SPECIAL, INCIDENTAL, INDIRECT, OR
+CONSEQUENTIAL DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES
+FOR LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS
+INFORMATION, OR ANY OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR
+INABILITY TO USE THE SOFTWARE, EVEN IF LICENSOR HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
+
+9. TERMINATION
+
+This license shall automatically terminate upon Licensee's failure to
+comply with any term of this Agreement. Upon termination, Licensee shall
+immediately cease all use of the Software and destroy all copies in its
+possession or control. The provisions of Sections 3, 4, 5, 7, 8, 9, 10,
+and 11 shall survive any termination of this Agreement.
+
+10. GOVERNING LAW
+
+This Agreement shall be governed by and construed in accordance with the
+laws of the jurisdiction in which Licensor is established, without regard
+to its conflict of law provisions.
+
+11. ENTIRE AGREEMENT
+
+This Agreement constitutes the entire agreement between the parties
+with respect to the subject matter hereof and supersedes all prior
+or contemporaneous agreements, representations, or understandings,
+whether written or oral.
+
+---
+
+For licensing inquiries, please contact:
+
+Email: licensing@howtohack.dev

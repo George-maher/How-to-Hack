@@ -1,0 +1,91 @@
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Build artifacts
+**/dist/
+**/dist-ssr/
+**/public/build/
+**/public/hot/
+
+# Environment files
+.env
+.env.local
+.env.backup
+.env.production
+.env.*.local
+.env.staging
+.env.dev
+backend/.env
+frontend/.env
+
+# Logs
+*.log
+**/storage/logs/*.log
+**/storage/pail
+
+# Cache
+**/storage/framework/cache/**
+**/storage/framework/sessions/**
+**/storage/framework/views/**
+**/bootstrap/cache/*.php
+**/storage/*.key
+**.phpunit.cache/**
+
+# Database
+**/database/database.sqlite
+**/database/*.sqlite
+**/database/*.sqlite3
+**/database/*.db
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.bak
+
+# IDE files
+.idea/
+.vscode/
+*.sublime-*
+*.sublime-workspace
+.fleet/
+.nova/
+.zed/
+.project
+.classpath
+
+# PHP
+.phpunit.cache/
+.phpunit.result.cache
+.phpactor.json
+auth.json
+.php_cs.cache
+
+# Frontend
+*.local
+*.tsbuildinfo
+
+# Docker
+**/docker/scanner/nmap*
+**/docker/scanner/*.tar.gz
+**/docker/scanner/*.zip
+**/docker/scanner/tools/
+
+# Commercial software protections
+license.key
+license.json
+activation.*
+*.lic
+
+# Backup files
+*.backup
+*.old
+*.orig
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store?

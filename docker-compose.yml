@@ -1,0 +1,119 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: howtohack-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/storage:/var/www/storage
+    networks:
+      - howtohack-network
+
+  queue-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: howtohack-queue
+    restart: unless-stopped
+    command: php artisan queue:work redis --tries=3 --timeout=120 --sleep=3
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/storage:/var/www/storage
+    networks:
+      - howtohack-network
+
+  frontend:
+    image: node:20-alpine
+    container_name: howtohack-frontend
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npm install && npm run build && npx serve -s dist -l 3000"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      app:
+        condition: service_started
+    networks:
+      - howtohack-network
+
+  db:
+    image: postgres:16-alpine
+    container_name: howtohack-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-howtohack}
+      POSTGRES_USER: ${DB_USERNAME:-howtohack}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - howtohack-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-howtohack}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: howtohack-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - howtohack-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  scanner-builder:
+    build:
+      context: ./backend/docker/scanner
+      dockerfile: Dockerfile
+    container_name: howtohack-scanner-builder
+    profiles:
+      - build
+    command: echo "Scanner image built successfully"
+
+volumes:
+  db-data:
+  redis-data:
+
+networks:
+  howtohack-network:
+    driver: bridge
