@@ -16,8 +16,9 @@ class ProjectResource extends JsonResource
             'target_url' => $this->target_url,
             'description' => $this->description,
             'status' => $this->status,
-            'scans_count' => $this->scans_count ?? $this->scans()->count(),
+            'scans_count' => $this->whenCounted('scans', fn () => $this->scans()->count()),
             'latest_scan' => new ScanResource($this->whenLoaded('latestScan')),
+            'scans' => ScanResource::collection($this->whenLoaded('scans')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

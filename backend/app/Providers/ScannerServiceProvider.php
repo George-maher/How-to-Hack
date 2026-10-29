@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers;
 
 use App\Contracts\AiProviderInterface;
@@ -18,8 +20,9 @@ class ScannerServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(ScannerRegistry::class, function ($app) {
+        $this->app->singleton(ScannerRegistry::class, static function ($app) {
             $scannerClasses = config('scanners.registry', []);
+
             return new ScannerRegistry($scannerClasses);
         });
 
@@ -27,10 +30,5 @@ class ScannerServiceProvider extends ServiceProvider
         $this->app->bind(ScanRepositoryInterface::class, ScanRepository::class);
         $this->app->bind(ScanResultRepositoryInterface::class, ScanResultRepository::class);
         $this->app->bind(ReportRepositoryInterface::class, ReportRepository::class);
-    }
-
-    public function boot(): void
-    {
-        //
     }
 }

@@ -3,9 +3,9 @@
 namespace App\Scanners;
 
 use App\DTOs\ScanResultCollection;
+use App\Enums\ScannerIntrusiveness;
 use App\Enums\ScannerCategory;
 use App\Models\Project;
-use Illuminate\Support\Facades\Http;
 
 class SqlInjectionAssessmentScanner extends BaseScanner
 {
@@ -83,6 +83,14 @@ class SqlInjectionAssessmentScanner extends BaseScanner
         return 'high';
     }
 
+    public function intrusiveness(): ScannerIntrusiveness
+    {
+        return ScannerIntrusiveness::Active;
+    }
+    /**
+     * Sends injection payloads, so it is an active scanner. It requires explicit operator approval.
+     */
+
     protected function scan(Project $project, array $context): ScanResultCollection
     {
         $results = new ScanResultCollection();
@@ -90,7 +98,7 @@ class SqlInjectionAssessmentScanner extends BaseScanner
         try {
             $baseUrl = rtrim($project->target_url, '/');
 
-            $response = Http::timeout($this->timeout)
+            $response = $this->http->guarded($this->timeout)
                 ->withOptions(['allow_redirects' => true])
                 ->get($baseUrl);
 
@@ -126,7 +134,7 @@ class SqlInjectionAssessmentScanner extends BaseScanner
             foreach ($this->sqliPayloads as $payload) {
                 try {
                     $url = $baseUrl . '?' . http_build_query([$param => $payload]);
-                    $response = Http::timeout(5)
+                    $response = $this->http->guarded(5)
                         ->withOptions(['allow_redirects' => false])
                         ->get($url);
 
@@ -163,7 +171,7 @@ class SqlInjectionAssessmentScanner extends BaseScanner
 
             try {
                 $start = microtime(true);
-                Http::timeout(10)
+                $this->http->guarded(10)
                     ->withOptions(['allow_redirects' => false])
                     ->get($baseUrl);
                 $baselineTime = (microtime(true) - $start) * 1000;
@@ -175,7 +183,7 @@ class SqlInjectionAssessmentScanner extends BaseScanner
                 try {
                     $url = $baseUrl . '?' . http_build_query([$param => $payload]);
                     $start = microtime(true);
-                    Http::timeout(15)
+                    $this->http->guarded(15)
                         ->withOptions(['allow_redirects' => false])
                         ->get($url);
                     $responseTime = (microtime(true) - $start) * 1000;
@@ -214,11 +222,11 @@ class SqlInjectionAssessmentScanner extends BaseScanner
                 $trueUrl = $baseUrl . '?' . http_build_query([$param => $truePayload]);
                 $falseUrl = $baseUrl . '?' . http_build_query([$param => $falsePayload]);
 
-                $trueResponse = Http::timeout(5)
+                $trueResponse = $this->http->guarded(5)
                     ->withOptions(['allow_redirects' => false])
                     ->get($trueUrl);
 
-                $falseResponse = Http::timeout(5)
+                $falseResponse = $this->http->guarded(5)
                     ->withOptions(['allow_redirects' => false])
                     ->get($falseUrl);
 

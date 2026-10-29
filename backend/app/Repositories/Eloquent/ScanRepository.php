@@ -3,6 +3,7 @@
 namespace App\Repositories\Eloquent;
 
 use App\Contracts\ScanRepositoryInterface;
+use App\Enums\ScanStatus;
 use App\Models\Scan;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -39,11 +40,35 @@ class ScanRepository implements ScanRepositoryInterface
 
     public function findWithResults(int $id): ?Scan
     {
-        return Scan::with(['project', 'results'])->find($id);
+        return Scan::with(['project', 'scannerRuns', 'approvedScope'])
+            ->withCount('results')
+            ->find($id);
     }
 
     public function getActiveScans(): Collection
     {
-        return Scan::whereIn('status', ['pending', 'running'])->get();
+        return Scan::whereIn('status', [
+            ScanStatus::Queued->value,
+            ScanStatus::AwaitingApproval->value,
+            ScanStatus::Running->value,
+            ScanStatus::CancelRequested->value,
+        ])->get();
+    }
+
+    public function getStaleScans(): Collection
+    {
+        $threshold = now()->subSeconds((int) config('security.execution.heartbeat_stale_seconds', 300));
+
+        return Scan::whereIn('status', [
+            ScanStatus::Running->value,
+            ScanStatus::CancelRequested->value,
+        ])
+            ->where(function ($query) use ($threshold) {
+                $query->where('heartbeat_at', '<', $threshold)
+                    ->orWhere(function ($q) use ($threshold) {
+                        $q->whereNull('heartbeat_at')->where('started_at', '<', $threshold);
+                    });
+            })
+            ->get();
     }
 }

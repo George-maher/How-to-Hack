@@ -3,6 +3,7 @@
 namespace App\Repositories\Eloquent;
 
 use App\Contracts\ScanResultRepositoryInterface;
+use App\Models\Scan;
 use App\Models\ScanResult;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -36,6 +37,32 @@ class ScanResultRepository implements ScanResultRepositoryInterface
     public function deleteByScan(int $scanId): bool
     {
         return ScanResult::where('scan_id', $scanId)->delete();
+    }
+
+    public function severityBreakdown(int $scanId): array
+    {
+        $scan = Scan::find($scanId);
+
+        $scannerRuns = $scan?->scannerRuns()
+            ->get(['scanner', 'outcome', 'findings_count', 'error'])
+            ->map(fn ($run) => [
+                'scanner' => $run->scanner,
+                'outcome' => $run->outcome,
+                'findings' => $run->findings_count,
+                'error' => $run->error,
+                'inconclusive' => $run->isInconclusive(),
+            ])->all() ?? [];
+
+        $inconclusive = array_values(array_filter($scannerRuns, static fn ($r) => $r['inconclusive']));
+
+        return [
+            'severities' => $this->countBySeverity($scanId),
+            'scanners' => $scannerRuns,
+            'inconclusive_scanners' => array_map(static fn ($r) => $r['scanner'], $inconclusive),
+            // An empty result set is only meaningful when no scanner was
+            // inconclusive; the UI uses this to avoid showing a false "clean".
+            'authoritative' => $inconclusive === [] && $scannerRuns !== [],
+        ];
     }
 
     public function countBySeverity(int $scanId): array

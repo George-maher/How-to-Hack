@@ -5,7 +5,6 @@ namespace App\Scanners;
 use App\DTOs\ScanResultCollection;
 use App\Enums\ScannerCategory;
 use App\Models\Project;
-use Illuminate\Support\Facades\Http;
 
 class TechnologyDetector extends BaseScanner
 {
@@ -57,7 +56,7 @@ class TechnologyDetector extends BaseScanner
         $results = new ScanResultCollection();
 
         try {
-            $response = Http::timeout($this->timeout)->get($project->target_url);
+            $response = $this->http->guarded($this->timeout)->get($project->target_url);
             $headers = $response->headers();
             $body = $response->body();
             $detected = [];

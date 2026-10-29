@@ -3,9 +3,9 @@
 namespace App\Scanners;
 
 use App\DTOs\ScanResultCollection;
+use App\Enums\ScannerIntrusiveness;
 use App\Enums\ScannerCategory;
 use App\Models\Project;
-use Illuminate\Support\Facades\Http;
 
 class DirectoryBruteForcer extends BaseScanner
 {
@@ -45,6 +45,14 @@ class DirectoryBruteForcer extends BaseScanner
         return 'high';
     }
 
+    public function intrusiveness(): ScannerIntrusiveness
+    {
+        return ScannerIntrusiveness::Active;
+    }
+    /**
+     * Requests many paths, so it is an active scanner. It requires explicit operator approval.
+     */
+
     protected function scan(Project $project, array $context): ScanResultCollection
     {
         $results = new ScanResultCollection();
@@ -54,7 +62,7 @@ class DirectoryBruteForcer extends BaseScanner
         foreach ($this->commonPaths as $path) {
             try {
                 $url = $baseUrl . $path;
-                $response = Http::timeout(max(2, $this->timeout / count($this->commonPaths)))
+                $response = $this->http->guarded(max(2, $this->timeout / count($this->commonPaths)))
                     ->withOptions(['allow_redirects' => false])
                     ->head($url);
 

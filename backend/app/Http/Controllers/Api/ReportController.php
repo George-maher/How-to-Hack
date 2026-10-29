@@ -1,116 +1,184 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Contracts\ReportRepositoryInterface;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ReportResource;
+use App\Models\Report;
 use App\Models\Scan;
 use App\Services\Report\ReportGenerator;
+use App\Services\Security\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 
 class ReportController extends Controller
 {
     public function __construct(
         private readonly ReportRepositoryInterface $reportRepository,
         private readonly ReportGenerator $reportGenerator,
-    ) {}
+        private readonly AuditLogger $audit,
+    ) {
+    }
 
-    public function all(): AnonymousResourceCollection
+    public function all(Request $request): AnonymousResourceCollection
     {
         return ReportResource::collection(
-            $this->reportRepository->findAll()
+            $this->reportRepository->findAllForUser($request->user())
         );
     }
 
-    public function index(int $scanId): AnonymousResourceCollection
+    public function index(Scan $scan): AnonymousResourceCollection
     {
+        $this->authorize('view', $scan);
+
         return ReportResource::collection(
-            $this->reportRepository->findByScan($scanId)
+            $this->reportRepository->findByScan((int) $scan->getKey())
         );
     }
 
-    public function show(int $id): ReportResource
+    public function show(Report $report): ReportResource
     {
-        $report = $this->reportRepository->findById($id);
-        if (!$report) {
-            abort(404, 'Report not found');
-        }
+        $this->authorize('view', $report);
+
         return new ReportResource($report);
     }
 
-    public function generate(int $scanId, Request $request): JsonResponse
+    public function generate(Scan $scan, Request $request): JsonResponse
     {
-        $scan = Scan::find($scanId);
-        if (!$scan) {
-            return response()->json(['message' => 'Scan not found'], 404);
+        $this->authorize('view', $scan);
+
+        $format = (string) $request->input('format', 'html');
+        if (! in_array($format, $this->reportGenerator->getFormatters(), true)) {
+            return response()->json([
+                'message' => "Unsupported format: {$format}",
+                'code' => 'unsupported_format',
+            ], 422);
         }
 
-        $format = $request->input('format', 'html');
-        if (!in_array($format, $this->reportGenerator->getFormatters())) {
-            return response()->json(['message' => "Unsupported format: {$format}"], 422);
+        // Reports are evidence: only generate them for scans that actually
+        // finished, and never present a failed scan as a clean report.
+        if (! $scan->isTerminal()) {
+            return response()->json([
+                'message' => 'The scan has not finished yet.',
+                'code' => 'scan_not_finished',
+                'status' => $scan->statusEnum()->value,
+            ], 409);
         }
 
         try {
             $result = $this->reportGenerator->generate($scan, $format);
-            return response()->json([
-                'message' => 'Report generated successfully',
-                'report' => new ReportResource($result['report']),
-            ], 201);
         } catch (\Throwable $e) {
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+
+            return response()->json([
+                'message' => 'The report could not be generated.',
+                'code' => 'report_generation_failed',
+            ], 500);
         }
+
+        $this->audit->record(AuditLogger::REPORT_GENERATED, 'allowed', [
+            'scan_id' => $scan->getKey(),
+            'report_id' => $result['report']->getKey(),
+            'format' => $format,
+        ], $result['report'], $request->user());
+
+        return response()->json([
+            'message' => 'Report generated.',
+            'report' => new ReportResource($result['report']),
+        ], 201);
     }
 
-    public function regenerate(int $id, Request $request): JsonResponse
+    public function regenerate(Report $report, Request $request): JsonResponse
     {
+        $this->authorize('view', $report);
+
         $format = $request->input('format');
-        if ($format && !in_array($format, $this->reportGenerator->getFormatters())) {
-            return response()->json(['message' => "Unsupported format: {$format}"], 422);
-        }
-
-        try {
-            $result = $this->reportGenerator->regenerate($id, $format ?? 'html');
+        if ($format !== null && ! in_array($format, $this->reportGenerator->getFormatters(), true)) {
             return response()->json([
-                'message' => 'Report regenerated successfully',
-                'report' => new ReportResource($result['report']),
-            ]);
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 404);
-        } catch (\Throwable $e) {
-            return response()->json(['message' => $e->getMessage()], 500);
+                'message' => "Unsupported format: {$format}",
+                'code' => 'unsupported_format',
+            ], 422);
         }
-    }
-
-    public function download(int $id, Request $request): \Illuminate\Http\Response
-    {
-        $format = $request->input('format', 'html');
 
         try {
-            $result = $this->reportGenerator->export($id, $format);
-        } catch (\RuntimeException $e) {
-            abort(404, $e->getMessage());
+            $result = $this->reportGenerator->regenerate((int) $report->getKey(), $format ?? 'html');
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'The report could not be regenerated.',
+                'code' => 'report_generation_failed',
+            ], 500);
         }
 
-        $report = $this->reportRepository->findById($id);
-        $filename = str_replace(' ', '_', $report->title) . '.' . $result['formatter']->getExtension();
-
-        return response($result['content'], 200, [
-            'Content-Type' => $result['formatter']->getMimeType(),
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        return response()->json([
+            'message' => 'Report regenerated.',
+            'report' => new ReportResource($result['report']),
         ]);
     }
 
-    public function destroy(int $id): JsonResponse
+    /**
+     * Authenticated download.
+     *
+     * The previous implementation returned the bytes to anyone who knew the id,
+     * and the frontend used a plain <a href> (so the bearer token was never
+     * sent). Both sides are fixed: the route requires auth, the policy checks
+     * ownership, and the frontend downloads the body itself.
+     */
+    public function download(Report $report, Request $request): Response|JsonResponse
     {
-        $report = $this->reportRepository->findById($id);
-        if (!$report) {
-            return response()->json(['message' => 'Report not found'], 404);
+        $this->authorize('download', $report);
+
+        $format = (string) $request->input('format', 'html');
+
+        try {
+            $result = $this->reportGenerator->export((int) $report->getKey(), $format);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'message' => 'That report format is not available.',
+                'code' => 'unsupported_format',
+            ], 404);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'The report could not be exported.',
+                'code' => 'report_export_failed',
+            ], 500);
         }
 
+        $this->audit->record(AuditLogger::REPORT_DOWNLOADED, 'allowed', [
+            'report_id' => $report->getKey(),
+            'scan_id' => $report->scan_id,
+            'format' => $format,
+        ], $report, $request->user());
+
+        $filename = preg_replace('/[^A-Za-z0-9._-]+/', '_', (string) $report->title) ?: 'report';
+        $filename .= '.'.$result['formatter']->getExtension();
+
+        return response($result['content'], 200, [
+            'Content-Type' => $result['formatter']->getMimeType(),
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function destroy(Report $report, Request $request): JsonResponse
+    {
+        $this->authorize('delete', $report);
+
+        $this->audit->record(AuditLogger::REPORT_DELETED, 'allowed', [
+            'report_id' => $report->getKey(),
+            'scan_id' => $report->scan_id,
+        ], $report, $request->user());
+
         $this->reportRepository->delete($report);
+
         return response()->json(['message' => 'Report deleted']);
     }
 

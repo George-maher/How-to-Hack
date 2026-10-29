@@ -13,5 +13,14 @@ interface ScanRepositoryInterface
     public function update(Scan $scan, array $data): Scan;
     public function delete(Scan $scan): bool;
     public function findWithResults(int $id): ?Scan;
+
+    /**
+     * Scans still in flight (queued/awaiting approval/running/cancel requested).
+     */
     public function getActiveScans(): Collection;
+
+    /**
+     * Scans that claim to be running but whose worker has stopped reporting.
+     */
+    public function getStaleScans(): Collection;
 }

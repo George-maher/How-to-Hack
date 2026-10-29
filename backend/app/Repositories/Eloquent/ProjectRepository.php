@@ -1,21 +1,27 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Repositories\Eloquent;
 
 use App\Contracts\ProjectRepositoryInterface;
 use App\Models\Project;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 
 class ProjectRepository implements ProjectRepositoryInterface
 {
-    public function all(): Collection
+    /**
+     * Scoped to the owner. There is deliberately no "all projects" method:
+     * an unscoped list is how cross-tenant leaks start.
+     */
+    public function allForUser(User $user): Collection
     {
-        return Project::withCount('scans')->latest()->get();
-    }
-
-    public function findById(int $id): ?Project
-    {
-        return Project::find($id);
+        return Project::query()
+            ->where('user_id', $user->getKey())
+            ->withCount('scans')
+            ->latest()
+            ->get();
     }
 
     public function create(array $data): Project
@@ -26,16 +32,19 @@ class ProjectRepository implements ProjectRepositoryInterface
     public function update(Project $project, array $data): Project
     {
         $project->update($data);
+
         return $project->fresh();
     }
 
     public function delete(Project $project): bool
     {
-        return $project->delete();
+        return (bool) $project->delete();
     }
 
-    public function findWithScans(int $id): ?Project
+    public function findWithScans(Project $project): Project
     {
-        return Project::with(['scans' => fn($q) => $q->latest()])->find($id);
+        return $project->load([
+            'scans' => fn ($q) => $q->withCount('results')->latest(),
+        ]);
     }
 }

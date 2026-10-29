@@ -4,6 +4,7 @@ namespace App\Repositories\Eloquent;
 
 use App\Contracts\ReportRepositoryInterface;
 use App\Models\Report;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 
 class ReportRepository implements ReportRepositoryInterface
@@ -13,9 +14,14 @@ class ReportRepository implements ReportRepositoryInterface
         return Report::with('scan.project')->find($id);
     }
 
-    public function findAll(): Collection
+    public function findAllForUser(User $user): Collection
     {
-        return Report::with('scan.project')->latest()->get();
+        return Report::query()
+            ->whereHas('scan.project', fn ($q) => $q->where('user_id', $user->getKey()))
+            ->with('scan.project')
+            ->latest()
+            ->limit(200)
+            ->get();
     }
 
     public function findByScan(int $scanId): Collection

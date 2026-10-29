@@ -53,10 +53,8 @@ return [
         'wordlist' => env('SCANNER_DIR_WORDLIST', storage_path('scanner/wordlists/common.txt')),
     ],
 
-    'docker' => [
-        'image' => env('SCANNER_DOCKER_IMAGE', 'howtohack/scanner:latest'),
-        'network' => env('SCANNER_DOCKER_NETWORK', 'host'),
-        'memory_limit' => env('SCANNER_DOCKER_MEMORY', '512m'),
-        'timeout' => env('SCANNER_DOCKER_TIMEOUT', 120),
-    ],
+    // There is deliberately no 'docker' block here. The API has no Docker
+    // access; container execution is the Runner's job and is configured by
+    // RUNNER_* (see config/security.php). A dead block with
+    // `network => 'host'` was removed in Phase 1 verification.
 ];
