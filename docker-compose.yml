@@ -1,20 +1,34 @@
+# Pentest Toolkit — self-hosted stack
+#
+# Network layout:
+#   edge-network     : frontend <-> API (published ports only here)
+#   internal-network : API <-> postgres/redis (no published ports)
+#   scanner-net      : Runner -> one-shot scanner containers. NOT `internal`:
+#                      a scanner must reach the target it was authorised to
+#                      scan. Isolation comes from what is absent from this
+#                      network (no API, no db, no redis, no proxy) plus
+#                      icc=false. See docs/security.md for egress rules.
+#
+# Privilege layout:
+#   app / queue-worker / scheduler : no Docker access at all
+#   runner                        : Docker API via a filtered proxy, no DB/Redis
+#   db / redis                    : unpublished, password protected
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: howtohack-app
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/up"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/up"]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 30s
-    env_file:
-      - .env
+      start_period: 40s
     depends_on:
       db:
         condition: service_healthy
@@ -23,37 +37,72 @@ services:
     volumes:
       - ./backend/storage:/var/www/storage
     networks:
-      - howtohack-network
+      - edge-network
+      - internal-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   queue-worker:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: howtohack-queue
     restart: unless-stopped
-    command: php artisan queue:work redis --tries=3 --timeout=120 --sleep=3
+    command: ["php", "artisan", "queue:work", "redis", "--tries=1", "--timeout=90", "--sleep=2", "--max-jobs=200"]
     env_file:
       - .env
     depends_on:
-      db:
-        condition: service_healthy
+      app:
+        condition: service_started
       redis:
         condition: service_healthy
     volumes:
       - ./backend/storage:/var/www/storage
     networks:
-      - howtohack-network
+      - internal-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  # Runs `scans:reap` every minute: the only thing that can close a scan whose
+  # worker died.
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["php", "artisan", "schedule:work"]
+    env_file:
+      - .env
+    depends_on:
+      app:
+        condition: service_started
+    volumes:
+      - ./backend/storage:/var/www/storage
+    networks:
+      - internal-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   frontend:
     image: node:20-alpine
-    container_name: howtohack-frontend
     restart: unless-stopped
     working_dir: /app
-    command: sh -c "npm install && npm run build && npx serve -s dist -l 3000"
+    # `npm ci` when a lock file is present, so the deployed bundle is reproducible.
+    command: sh -c "npm ci --omit=dev || npm install --omit=dev; npm ci || npm install; npm run build && npx serve -s dist -l 3000"
     environment:
+      # Browser-facing: must be reachable from the user's browser, not the container.
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -61,24 +110,88 @@ services:
       app:
         condition: service_started
     networks:
-      - howtohack-network
+      - edge-network
+
+  runner:
+    build:
+      context: ./runner
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      RUNNER_PORT: "8080"
+      RUNNER_SECRET: ${RUNNER_SECRET:?RUNNER_SECRET must be set (32+ characters)}
+      RUNNER_SCANNER_NETWORK: scanner-net
+      RUNNER_IMAGE: howtohack/scanner:latest
+      RUNNER_CONTAINER_USER: "65534:65534"
+      RUNNER_MAX_CONCURRENT: "2"
+      RUNNER_MAX_TIMEOUT_MS: "600000"
+      LOG_LEVEL: info
+      # The Docker API is reached through a method-filtered proxy, never the raw
+      # socket. Override with a socket mount only if you accept root-equivalence.
+      DOCKER_HOST: tcp://docker-proxy:2375
+    # No ports: the Runner is reachable only from the API over internal-network.
+    depends_on:
+      docker-proxy:
+        condition: service_started
+    volumes:
+      - ./backend/storage/scanner/wordlists:/opt/howtohack/wordlists:ro
+    networks:
+      - internal-network
+      - scanner-control
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Filters the Docker API to the handful of read/write calls the Runner needs.
+  #
+  # This proxy filters *endpoints*, not request bodies. It removes exec, volume,
+  # secret and swarm access, but container creation necessarily accepts a
+  # HostConfig body, so a *compromised Runner* could still ask for a privileged
+  # container. It is a least-privilege boundary for everything except the
+  # Runner, not a sandbox against the Runner. See docs/security.md section 5;
+  # true containment needs rootless Docker or a Docker authorization plugin.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.2
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      IMAGES: "1"
+      POST: "1"
+      EXEC: "0"
+      VOLUMES: "0"
+      SECRETS: "0"
+      SWARM: "0"
+      NODES: "0"
+      SERVICES: "0"
+      SYSTEM: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - scanner-control
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   db:
     image: postgres:16-alpine
-    container_name: howtohack-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_DATABASE:-howtohack}
       POSTGRES_USER: ${DB_USERNAME:-howtohack}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+    # No published port: the database is reachable only from internal-network.
     volumes:
       - db-data:/var/lib/postgresql/data
     networks:
-      - howtohack-network
+      - internal-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-howtohack}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-howtohack} -d ${DB_DATABASE:-howtohack}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -86,16 +199,15 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: howtohack-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}", "--appendonly", "yes"]
+    # No published port and no anonymous access.
     volumes:
       - redis-data:/data
     networks:
-      - howtohack-network
+      - internal-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -105,15 +217,31 @@ services:
     build:
       context: ./backend/docker/scanner
       dockerfile: Dockerfile
-    container_name: howtohack-scanner-builder
     profiles:
       - build
-    command: echo "Scanner image built successfully"
 
 volumes:
   db-data:
   redis-data:
 
 networks:
-  howtohack-network:
+  edge-network:
     driver: bridge
+  internal-network:
+    driver: bridge
+    internal: false
+  # Dedicated network for one-shot scanner containers.
+  #
+  # It is deliberately NOT `internal: true`: a scanner must be able to reach the
+  # target it is authorised to scan, and for a public target that means reaching
+  # the internet. Isolation comes from what is *not* on this network — no API, no
+  # database, no Redis, no proxy — plus icc=false so scanners cannot talk to each
+  # other. See docs/security.md for the recommended host-level egress rules.
+  scanner-net:
+    driver: bridge
+    attachable: true
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "false"
+  scanner-control:
+    driver: bridge
+    internal: true

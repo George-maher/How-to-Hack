@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { reportsApi } from '../services/api';
+import DownloadButton from '../components/DownloadButton';
 import type { Report } from '../types';
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -31,7 +32,20 @@ export default function ReportDetail() {
   }, [id]);
 
   useEffect(() => {
-    loadReport();
+    let cancelled = false;
+
+    // State is set once the request resolves, never synchronously in the
+    // effect body.
+    const initialLoad = async () => {
+      if (cancelled) return;
+      await loadReport();
+    };
+
+    void initialLoad();
+
+    return () => {
+      cancelled = true;
+    };
   }, [loadReport]);
 
   const handleRegenerate = async () => {
@@ -101,13 +115,11 @@ export default function ReportDetail() {
               <option key={val} value={val}>{label}</option>
             ))}
           </select>
-          <a
-            href={reportsApi.downloadUrl(report.id, downloadFormat)}
+          <DownloadButton
+            reportId={report.id}
+            format={downloadFormat}
             className="btn btn-primary"
-            download
-          >
-            Download
-          </a>
+          />
           <button onClick={handleRegenerate} className="btn btn-secondary">
             Regenerate
           </button>

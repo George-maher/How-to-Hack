@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { reportsApi } from '../services/api';
+import DownloadButton from '../components/DownloadButton';
 import type { Report } from '../types';
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -71,13 +72,7 @@ export default function Reports() {
               <Link to={`/reports/${report.id}`} className="btn btn-sm btn-primary">
                 View
               </Link>
-              <a
-                href={reportsApi.downloadUrl(report.id, report.format)}
-                className="btn btn-sm btn-secondary"
-                download
-              >
-                Download
-              </a>
+              <DownloadButton reportId={report.id} format={report.format} />
             </div>
           </div>
         ))}
