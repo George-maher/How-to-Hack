@@ -40,6 +40,11 @@ class Project extends Model
         return $this->hasMany(Scan::class);
     }
 
+    public function scopeOwnedBy($query, User $user)
+    {
+        return $query->where('user_id', $user->getKey());
+    }
+
     public function latestScan()
     {
         return $this->hasOne(Scan::class)->latestOfMany();
@@ -48,8 +53,10 @@ class Project extends Model
     public function activeScans()
     {
         return $this->scans()->whereIn('status', [
-            ScanStatus::Pending->value,
+            ScanStatus::Queued->value,
+            ScanStatus::AwaitingApproval->value,
             ScanStatus::Running->value,
+            ScanStatus::CancelRequested->value,
         ]);
     }
 }

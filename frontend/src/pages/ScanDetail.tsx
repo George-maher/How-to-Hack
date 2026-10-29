@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { reportsApi, scansApi } from '../services/api';
+import { ApiError, reportsApi, scansApi } from '../services/api';
+import DownloadButton from '../components/DownloadButton';
 import type { Report, Scan, ScanResult, SeverityLevel } from '../types';
+import { IN_FLIGHT_STATUSES, SCAN_STATUS_LABELS } from '../types';
 
 const SEVERITY_ORDER: SeverityLevel[] = ['critical', 'high', 'medium', 'low', 'info'];
 
@@ -14,7 +16,15 @@ export default function ScanDetail() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -27,35 +37,58 @@ export default function ScanDetail() {
       setReports(reportsData);
       setScan(scanData);
       setResults(resultsData);
+      setError(null);
 
-      const terminal = ['completed', 'failed', 'cancelled'];
-      if (terminal.includes(scanData.status) && pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
+      // The server decides when a scan is finished; the UI may not guess.
+      if (!IN_FLIGHT_STATUSES.includes(scanData.status)) {
+        stopPolling();
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+      setError(err instanceof Error ? err.message : 'The scan could not be loaded.');
+      stopPolling();
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, stopPolling]);
 
   useEffect(() => {
-    loadData();
+    let cancelled = false;
 
-    pollingRef.current = setInterval(loadData, 5000);
+    const tick = async () => {
+      if (cancelled) return;
+      await loadData();
+    };
+
+    void tick();
+    pollingRef.current = setInterval(tick, 5000);
 
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+      cancelled = true;
+      stopPolling();
     };
-  }, [loadData]);
+  }, [loadData, stopPolling]);
+
+  const handleCancel = async () => {
+    if (!scan) return;
+    setCancelling(true);
+    try {
+      const result = await scansApi.cancel(scan.id);
+      // `cancel_requested` is honest: the scan has not stopped yet.
+      if (!result.confirmed) {
+        setError('Cancellation requested. The scanner is stopping; the scan will finish shortly.');
+      }
+      await loadData();
+    } catch (err: unknown) {
+      // 409 means somebody else already finished it: refresh instead of shouting.
+      if (err instanceof ApiError && err.code === 'scan_already_finished') {
+        await loadData();
+      } else {
+        setError(err instanceof Error ? err.message : 'The scan could not be cancelled.');
+      }
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const filteredResults =
     severityFilter === 'all'
@@ -108,8 +141,36 @@ export default function ScanDetail() {
           &larr; Back
         </button>
         <h1>Scan #{scan.id}</h1>
-        <span className={`scan-badge-large scan-${scan.status}`}>{scan.status}</span>
+        <span className={`scan-badge-large scan-${scan.status}`}>
+          {SCAN_STATUS_LABELS[scan.status] ?? scan.status}
+        </span>
+        {(scan.status === 'running' || scan.status === 'queued') && (
+          <button className="btn btn-sm btn-danger" onClick={handleCancel} disabled={cancelling}>
+            {cancelling ? 'Cancelling…' : 'Cancel scan'}
+          </button>
+        )}
       </div>
+
+      {scan.status === 'awaiting_approval' && (
+        <div className="notice notice-warning" role="status">
+          This scan is waiting for approval. It will not run until an operator approves the
+          exact target, port set and tool list that were requested.
+        </div>
+      )}
+
+      {(scan.status === 'failed' || scan.status === 'timed_out' || scan.status === 'cancelled') && (
+        <div className="notice notice-error" role="alert">
+          <strong>{scan.outcome_label ?? SCAN_STATUS_LABELS[scan.status] ?? scan.status}</strong>
+          {scan.failure_detail ? <> — {scan.failure_detail}</> : null}
+        </div>
+      )}
+
+      {scan.status === 'completed' && scan.degraded && (
+        <div className="notice notice-warning" role="status">
+          <strong>Partial coverage.</strong>{' '}
+          {scan.failure_detail ?? 'Some scanners did not complete, so the absence of findings does not prove the target clean.'}
+        </div>
+      )}
 
       <div className="scan-info">
         <div className="info-row">
@@ -117,7 +178,8 @@ export default function ScanDetail() {
           <Link to={`/projects/${scan.project_id}`}>View Project</Link>
         </div>
         <div className="info-row">
-          <strong>Status:</strong> {scan.status}
+          <strong>Status:</strong> {SCAN_STATUS_LABELS[scan.status] ?? scan.status}
+          {scan.outcome_label ? <span className="muted"> — {scan.outcome_label}</span> : null}
         </div>
         <div className="info-row">
           <strong>Started:</strong>{' '}
@@ -156,6 +218,37 @@ export default function ScanDetail() {
         </div>
       </div>
 
+      {scan.scanner_runs && scan.scanner_runs.length > 0 && (
+        <div className="scanner-runs">
+          <h2>Scanners</h2>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Scanner</th>
+                <th>Mode</th>
+                <th>Outcome</th>
+                <th>Findings</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scan.scanner_runs.map((run) => (
+                <tr key={run.scanner} className={run.inconclusive ? 'row-warning' : undefined}>
+                  <td>{run.scanner}</td>
+                  <td>{run.intrusiveness}</td>
+                  <td title={run.error ?? undefined}>
+                    {run.outcome}
+                    {run.inconclusive ? ' (no usable result)' : ''}
+                  </td>
+                  <td>{run.inconclusive ? '—' : run.findings_count}</td>
+                  <td>{run.duration_ms === null ? '—' : `${(run.duration_ms / 1000).toFixed(1)}s`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="filter-bar">
         <h2>Results</h2>
         <div className="filter-group">
@@ -186,7 +279,17 @@ export default function ScanDetail() {
           </div>
         ))}
         {filteredResults.length === 0 && (
-          <p className="empty-state">No results match the filter</p>
+          <p className="empty-state">
+            {severityFilter === 'all'
+              ? IN_FLIGHT_STATUSES.includes(scan.status)
+                ? 'No findings recorded yet — the scan is still running.'
+                : scan.degraded
+                  ? 'No findings, but coverage was incomplete: treat this as unproven, not clean.'
+                  : scan.status === 'completed'
+                    ? 'No findings were recorded for this scan.'
+                    : 'This scan produced no findings because it did not complete.'
+              : 'No results match the filter'}
+          </p>
         )}
       </div>
 
@@ -209,6 +312,11 @@ export default function ScanDetail() {
         {scan.status === 'completed' && reports.length === 0 && (
           <ReportActions scanId={scan.id} onGenerated={loadData} />
         )}
+        {scan.status === 'completed' && scan.degraded && (
+          <p className="notice notice-warning" role="status">
+            Some scanners did not complete. Findings are partial — see the scanner list above.
+          </p>
+        )}
         {reports.length > 0 && (
           <div className="reports-list">
             {reports.map((report) => (
@@ -217,7 +325,11 @@ export default function ScanDetail() {
           </div>
         )}
         {scan.status !== 'completed' && reports.length === 0 && (
-          <p className="empty-state">Reports available after scan completes</p>
+          <p className="empty-state">
+            {IN_FLIGHT_STATUSES.includes(scan.status)
+              ? 'Reports become available once the scan finishes.'
+              : 'This scan produced no report because it did not complete.'}
+          </p>
         )}
       </div>
     </div>
@@ -241,13 +353,7 @@ function ReportCard({ report }: { report: Report }) {
         <Link to={`/reports/${report.id}`} className="btn btn-sm btn-primary">
           View
         </Link>
-        <a
-          href={reportsApi.downloadUrl(report.id, report.format)}
-          className="btn btn-sm btn-secondary"
-          download
-        >
-          Download
-        </a>
+        <DownloadButton reportId={report.id} format={report.format} />
       </div>
     </div>
   );

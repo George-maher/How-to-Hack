@@ -3,7 +3,9 @@
 namespace App\Scanners;
 
 use App\DTOs\ScanResultCollection;
+use App\DTOs\ScannerOutcome;
 use App\Enums\ScannerCategory;
+use App\Enums\ScannerIntrusiveness;
 use App\Models\Project;
 
 class PortScanner extends BaseScanner
@@ -35,14 +37,33 @@ class PortScanner extends BaseScanner
         return 'medium';
     }
 
+    /**
+     * Connects to the target host on many ports, so it is an active scanner.
+     */
+    public function intrusiveness(): ScannerIntrusiveness
+    {
+        return ScannerIntrusiveness::Active;
+    }
+
     protected function scan(Project $project, array $context): ScanResultCollection
     {
         $results = new ScanResultCollection();
         $host = parse_url($project->target_url, PHP_URL_HOST) ?? $project->target_url;
         $openPorts = [];
 
-        $perPortTimeout = max(1, $this->timeout / count($this->commonPorts));
-        foreach ($this->commonPorts as $port) {
+        // Only probe ports the operator authorized for this target. Scanning
+        // ports that are not in the approved scope would be an out-of-scope
+        // action, so the list is intersected with the approval instead of
+        // being sent wholesale.
+        $approved = $this->approvedPorts($context);
+        if ($approved === []) {
+            return $results->withOutcome(ScannerOutcome::blocked('No ports were approved for this target.'));
+        }
+
+        $ports = array_values(array_intersect($this->commonPorts, $approved));
+        $perPortTimeout = max(1, $this->timeout / max(1, count($ports)));
+
+        foreach ($ports as $port) {
             try {
                 $errno = 0;
                 $errstr = '';
@@ -80,11 +101,23 @@ class PortScanner extends BaseScanner
                 'info',
                 'No common ports open',
                 "No common open ports detected on {$host}",
-                ['scanned_ports' => $this->commonPorts]
+                ['scanned_ports' => $ports]
             ));
         }
 
         return $results;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     * @return list<int>
+     */
+    private function approvedPorts(array $context): array
+    {
+        $decision = $context['scope'] ?? null;
+        $ports = $decision?->ports ?? $context['ports'] ?? [];
+
+        return array_values(array_unique(array_map('intval', array_filter((array) $ports, 'is_numeric'))));
     }
 
     private function getServiceNames(array $ports): array

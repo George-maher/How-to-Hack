@@ -3,9 +3,9 @@
 namespace App\Scanners;
 
 use App\DTOs\ScanResultCollection;
+use App\Enums\ScannerIntrusiveness;
 use App\Enums\ScannerCategory;
 use App\Models\Project;
-use Illuminate\Support\Facades\Http;
 
 class XssAssessmentScanner extends BaseScanner
 {
@@ -55,6 +55,14 @@ class XssAssessmentScanner extends BaseScanner
         return 'high';
     }
 
+    public function intrusiveness(): ScannerIntrusiveness
+    {
+        return ScannerIntrusiveness::Active;
+    }
+    /**
+     * Sends script payloads, so it is an active scanner. It requires explicit operator approval.
+     */
+
     protected function scan(Project $project, array $context): ScanResultCollection
     {
         $results = new ScanResultCollection();
@@ -62,7 +70,7 @@ class XssAssessmentScanner extends BaseScanner
         try {
             $baseUrl = rtrim($project->target_url, '/');
 
-            $response = Http::timeout($this->timeout)
+            $response = $this->http->guarded($this->timeout)
                 ->withOptions(['allow_redirects' => true])
                 ->get($baseUrl);
 
@@ -99,7 +107,7 @@ class XssAssessmentScanner extends BaseScanner
             foreach (array_slice($this->xssPayloads['reflected'], 0, 3) as $payload) {
                 try {
                     $url = $baseUrl . '?' . http_build_query([$param => $payload]);
-                    $response = Http::timeout(5)
+                    $response = $this->http->guarded(5)
                         ->withOptions(['allow_redirects' => false])
                         ->get($url);
 

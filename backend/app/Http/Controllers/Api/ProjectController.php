@@ -1,10 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Contracts\ProjectRepositoryInterface;
+use App\Exceptions\TargetNotAuthorised;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\InitiateScanRequest;
+use App\Http\Requests\StoreProjectRequest;
+use App\Http\Requests\UpdateProjectRequest;
 use App\Http\Resources\ProjectResource;
+use App\Models\Project;
 use App\Services\ProjectService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,73 +22,90 @@ class ProjectController extends Controller
     public function __construct(
         private readonly ProjectRepositoryInterface $projectRepository,
         private readonly ProjectService $projectService,
-    ) {}
-
-    public function index(): AnonymousResourceCollection
-    {
-        return ProjectResource::collection($this->projectRepository->all());
+    ) {
     }
 
-    public function store(Request $request): JsonResponse
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'target_url' => 'required|string|max:2048',
-            'description' => 'nullable|string',
+        // Scoped to the caller. The previous implementation returned every
+        // project in the database.
+        return ProjectResource::collection(
+            $this->projectRepository->allForUser($request->user())
+        );
+    }
+
+    public function store(StoreProjectRequest $request): JsonResponse
+    {
+        $project = $this->projectService->create([
+            ...$request->validated(),
+            'user_id' => $request->user()->getKey(),
         ]);
 
-        $validated['user_id'] = $request->user()->id;
-
-        $project = $this->projectService->create($validated);
         return response()->json(new ProjectResource($project), 201);
     }
 
-    public function show(int $id): JsonResponse
+    public function show(Project $project): JsonResponse
     {
-        $project = $this->projectRepository->findWithScans($id);
-        if (!$project) {
-            return response()->json(['message' => 'Project not found'], 404);
-        }
-        return response()->json(new ProjectResource($project));
+        $this->authorize('view', $project);
+
+        return response()->json(new ProjectResource($this->projectRepository->findWithScans($project)));
     }
 
-    public function update(Request $request, int $id): JsonResponse
+    public function update(UpdateProjectRequest $request, Project $project): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'target_url' => 'sometimes|string|max:2048',
-            'description' => 'nullable|string',
-            'status' => 'sometimes|string|in:active,inactive',
-        ]);
+        $this->authorize('update', $project);
 
-        try {
-            $project = $this->projectService->update($id, $validated);
-            return response()->json(new ProjectResource($project));
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 404);
-        }
+        $updated = $this->projectService->update($project, $request->validated());
+
+        return response()->json(new ProjectResource($updated));
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(Project $project): JsonResponse
     {
-        try {
-            $this->projectService->delete($id);
-            return response()->json(['message' => 'Project deleted'], 200);
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 404);
-        }
+        $this->authorize('delete', $project);
+
+        $this->projectService->delete($project);
+
+        return response()->json(['message' => 'Project deleted']);
     }
 
-    public function scan(int $id): JsonResponse
+    /**
+     * Start a scan. Active scanners require approval, which is requested here
+     * and granted (or not) by a separate, audited call.
+     */
+    public function scan(InitiateScanRequest $request, Project $project): JsonResponse
     {
+        $this->authorize('scan', $project);
+
         try {
-            $scan = $this->projectService->initiateScan($id);
-            return response()->json([
-                'message' => 'Scan initiated',
-                'scan_id' => $scan->id,
-            ], 202);
+            $scan = $this->projectService->initiateScan(
+                $project,
+                $request->validated(),
+                $request->user(),
+            );
+        } catch (TargetNotAuthorised $e) {
+            return response()->json($e->toArray(), 403);
         } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
+            return response()->json(['message' => $e->getMessage(), 'code' => 'scan_not_started'], 422);
         }
+
+        $payload = [
+            'message' => $scan->statusEnum()->isInFlight() && $scan->status->value === 'awaiting_approval'
+                ? 'This scan needs approval before it can run.'
+                : 'Scan queued.',
+            'scan_id' => $scan->getKey(),
+            'status' => $scan->statusEnum()->value,
+            'requires_approval' => $scan->statusEnum()->value === 'awaiting_approval',
+        ];
+
+        if ($payload['requires_approval']) {
+            $approval = $scan->approvals()->latest('id')->first();
+            $payload['approval_id'] = $approval?->getKey();
+            $payload['approval'] = $approval?->only([
+                'id', 'status', 'target_host', 'target_ports', 'tools', 'expires_at',
+            ]);
+        }
+
+        return response()->json($payload, 202);
     }
 }

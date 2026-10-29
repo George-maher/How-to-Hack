@@ -3,9 +3,9 @@
 namespace App\Scanners;
 
 use App\DTOs\ScanResultCollection;
+use App\Enums\ScannerIntrusiveness;
 use App\Enums\ScannerCategory;
 use App\Models\Project;
-use Illuminate\Support\Facades\Http;
 
 class ApiAssessmentScanner extends BaseScanner
 {
@@ -47,6 +47,14 @@ class ApiAssessmentScanner extends BaseScanner
         return 'high';
     }
 
+    public function intrusiveness(): ScannerIntrusiveness
+    {
+        return ScannerIntrusiveness::Active;
+    }
+    /**
+     * Probes API endpoints with varied methods/payloads, so it is an active scanner. It requires explicit operator approval.
+     */
+
     protected function scan(Project $project, array $context): ScanResultCollection
     {
         $results = new ScanResultCollection();
@@ -85,7 +93,7 @@ class ApiAssessmentScanner extends BaseScanner
         foreach ($this->apiPaths as $path) {
             try {
                 $url = $baseUrl . $path;
-                $response = Http::timeout(5)
+                $response = $this->http->guarded(5)
                     ->withOptions(['allow_redirects' => false])
                     ->head($url);
 
@@ -139,7 +147,7 @@ class ApiAssessmentScanner extends BaseScanner
         foreach ($specPaths as $path => $type) {
             try {
                 $url = $baseUrl . $path;
-                $response = Http::timeout(5)->get($url);
+                $response = $this->http->guarded(5)->get($url);
 
                 if ($response->successful()) {
                     $contentType = $response->header('Content-Type', '');
@@ -229,7 +237,7 @@ class ApiAssessmentScanner extends BaseScanner
     private function analyzeApiSecurityHeaders(string $baseUrl, ScanResultCollection $results): void
     {
         try {
-            $response = Http::timeout($this->timeout)
+            $response = $this->http->guarded($this->timeout)
                 ->withOptions(['allow_redirects' => true])
                 ->get($baseUrl);
 
@@ -278,7 +286,7 @@ class ApiAssessmentScanner extends BaseScanner
     private function analyzeJwtTokens(string $baseUrl, ScanResultCollection $results): void
     {
         try {
-            $response = Http::timeout($this->timeout)
+            $response = $this->http->guarded($this->timeout)
                 ->withOptions(['allow_redirects' => true])
                 ->get($baseUrl);
 

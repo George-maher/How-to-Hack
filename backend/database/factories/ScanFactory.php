@@ -18,6 +18,7 @@ class ScanFactory extends Factory
             'ai_reasoning' => [],
             'completed_scanners' => [],
             'metadata' => null,
+            'outcome_reason' => 'completed',
             'started_at' => now()->subMinutes(10),
             'completed_at' => now(),
         ];
@@ -26,7 +27,7 @@ class ScanFactory extends Factory
     public function pending(): static
     {
         return $this->state(fn(array $attrs) => [
-            'status' => 'pending',
+            'status' => 'queued',
             'started_at' => null,
             'completed_at' => null,
         ]);

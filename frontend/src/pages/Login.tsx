@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { authApi, setToken, setStoredUser } from '../services/api';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { ApiError, authApi, setToken, setStoredUser } from '../services/api';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    searchParams.get('expired') === '1' ? 'Your session expired. Sign in again to continue.' : null,
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +23,14 @@ export default function Login() {
       setStoredUser(res.user);
       navigate('/');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      if (err instanceof ApiError) {
+        // A wrong password is shown inline. It must never look like a session
+        // expiry, and it must never reload the page (which is what a blanket
+        // 401 handler used to do).
+        setError(err.message);
+      } else {
+        setError('Sign in failed. Try again.');
+      }
     } finally {
       setSubmitting(false);
     }

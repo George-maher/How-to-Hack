@@ -5,7 +5,6 @@ namespace App\Scanners;
 use App\DTOs\ScanResultCollection;
 use App\Enums\ScannerCategory;
 use App\Models\Project;
-use Illuminate\Support\Facades\Http;
 
 class HttpAnalyzer extends BaseScanner
 {
@@ -34,7 +33,7 @@ class HttpAnalyzer extends BaseScanner
         $results = new ScanResultCollection();
 
         try {
-            $response = Http::timeout($this->timeout)
+            $response = $this->http->guarded($this->timeout)
                 ->withOptions(['allow_redirects' => true])
                 ->get($project->target_url);
 
