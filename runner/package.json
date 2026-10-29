@@ -1,0 +1,17 @@
+{
+  "name": "howtohack-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated scanner execution service for the Pentest Toolkit",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  }
+}
